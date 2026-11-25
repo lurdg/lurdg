@@ -1,17 +1,15 @@
-# Simba Dove Global Logistics — 1.0.5
+# Simba Dove Global Logistics — 1.0.6
 
-Existing installation: use cumulative simbadove-update-1.0.5.zip and simbadove-update-1.0.5-guide.md. A working 1.0.3/1.0.4 installation needs no additional SQL. Earlier installs need only still-missing migrations 003 and 004, once each. Back up before extraction; never reimport the fresh-install schema into production.
+Existing 1.0.5 installation: download the small simbadove-update-1.0.6.zip and follow simbadove-update-1.0.6-guide.md. No new SQL or configuration changes. Older installs should apply the cumulative 1.0.5 update first. Back up before replacement.
 
-Fixes stale compressed browser assets using content-specific CSS/JS filenames and a private generated manifest. Prior browser checks reproduced a zero-height map caused by an old Brotli CSS response despite a newer uncompressed file. Fresh assets substituted only in the test browser rendered the map/route/markers correctly at desktop 380px and mobile 300px, without modifying production.
+Buttons fit their labels/icons with consistent padding and margins. Search inputs have bounded wrappers and buttons remain about 8px away instead of being pushed far across the page. Mobile buttons fit their content and can stack immediately below their fields. A pulsing halo highlights the latest public map position while its center stays fixed; reduced-motion preferences disable the animation.
 
-Adds compact staff shipment/event forms, grouped Origin/Destination map controls and Find location buttons directly beside their inputs on desktop or below on mobile. Forms passed overflow checks at 1365/390/320 pixels. The prior automatic geocoding, fallback, Departure summary, record lifecycle and WhatsApp remain included.
+The small patch updates matching CSS, map JavaScript and the private asset manifest, with both source-public and live-public_html copies. It preserves database records, configuration, entry paths and redirects. Existing locations need no changes.
 
-Patch preserves configuration, public index.php and .htaccess and supplies assets in both source public/ and live public_html locations. Matching manifest and fingerprinted files must deploy together. The build helper is local-only; no Python/Node process is needed on Namecheap.
+Read-only Chromium checks passed 45 page/viewport combinations at 1365/390/320 pixels, with button width, input/button gap and overflow assertions. A browser-only fresh-asset substitution check confirmed animated halo opacity, a fixed center and reduced-motion support. The assistant has not installed this update on hosting.
 
-Full simbadove-global-logistics.zip is for a fresh installation and includes all source/dependencies/schema/tests/guides. Existing users should apply the smaller update ZIP.
+The complete simbadove-global-logistics.zip is also refreshed for new installations and contains the full current source, schema, dependencies, tests and documentation. Do not use the fresh-install schema as an upgrade.
 
-Validation: 30 main integration groups, two JavaScript suites, syntax, database upgrade/restore and desktop/mobile browser checks. Production files and shipment records have not been changed by the assistant.
+Patch SHA-256: `4187c6e42be865b5be9c5dc1d491a7292af9d323d0a7cb27ca0858d16e9d771b`
 
-Patch SHA-256: `efc88c93b41e4ca3167e60d2b99cab023d282a83161a704d63afa3276b8d1df0`
-
-Full ZIP SHA-256: `160fd305edb9b4b6e6c98772344145cbb08971c0113a7206ef809acf3663db89`
+Full ZIP SHA-256: `4a08a0ba7657558d8081d634bc88efcbe1ef5d8d6ca9ec4af11c88dabc8da2b1`
