@@ -1,13 +1,15 @@
-# Simba Dove Global Logistics — 1.0.2
+# Simba Dove Global Logistics — 1.0.3
 
-Existing production installation: download simbadove-update-1.0.2.zip and follow simbadove-update-1.0.2-guide.md. Back up first and import 003_record_lifecycle.sql ONCE before replacing code. Do not import schema.sql into an existing database. The patch preserves configuration, public entry paths and redirects, and updates the fixed public_html stylesheet too.
+Existing installation: download the cumulative simbadove-update-1.0.3.zip and follow simbadove-update-1.0.3-guide.md. Take backups; check schema_migrations and apply 003_record_lifecycle.sql then 004_tracking_map.sql only when not already applied. Never import the fresh-install schema into production.
 
-Adds Trash/restore/permanent delete for customers, staff, quotes, enquiries, tracking updates, shipments and shipment documents; account protections and private-file cleanup; current public location; pickup/departure UTC dates; country-only routes. WhatsApp remains linked to +23274976543.
+Adds a public Leaflet/OpenStreetMap map, explicit endpoint/event coordinates, planned connection, recorded public checkpoints and latest public position. Private/deleted coordinates are excluded; unknown locations are not guessed. Departure (UTC) replaces Created in the public tracking summary. Includes the earlier Trash/delete/restore, schedule and country-only route changes.
 
-New installation: simbadove-global-logistics.zip includes the complete source, dependencies, latest schema, documentation and tests.
+Patch preserves private configuration, entry paths and redirects; public assets are supplied for both the source public/ directory and the actual public_html root. Leaflet is bundled with its license. No API key, GPS feed, automatic geocoding or road-route service is required/claimed.
 
-Validated locally: 14 original integration tests, eight lifecycle tests, foundation/content checks, old-schema upgrade, PHP syntax and a 27-table backup/restore. Browser QA for this update is not claimed. Apply acceptance checks from the update guide on hosting. No live production records have been modified by the assistant.
+New installation: simbadove-global-logistics.zip includes the current complete source, schema, dependencies, tests and documentation.
 
-Patch SHA-256: `89df4d31bd7e83d85e18112151d7370b0a1743395909030914ce77157184cfe1`
+Validated locally: 26 main integration groups, foundation/content checks, JavaScript behavior tests with lightweight test doubles, syntax, populated-schema upgrade and 27-table backup/restore. Browser/rendering QA for this update is not claimed. Apply hosting acceptance checks from the guide. The assistant has not changed production records or deployed this update to hosting.
 
-Full ZIP SHA-256: `5d299b450cb08e580ba1756d8b5d91f8585ff75f0079b041876ba563acaadc73`
+Patch SHA-256: `5fb9665cb174d8ab39a39b908bc0a498461f55d59dfdb70e21830754d8af086a`
+
+Full ZIP SHA-256: `c1e2ec76c3c13e59d1a9de0d7a491bcff93142ebf97bc0f01ea78dac31bb2bda`
