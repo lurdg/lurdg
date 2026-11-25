@@ -1,13 +1,13 @@
-# Simba Dove Global Logistics — 1.0.1
+# Simba Dove Global Logistics — 1.0.2
 
-For an EXISTING installation, download simbadove-whatsapp-update.zip and follow simbadove-whatsapp-update.md. This patch replaces only the shared visitor layout and stylesheet and adds its guide. Configuration and database are preserved.
+Existing production installation: download simbadove-update-1.0.2.zip and follow simbadove-update-1.0.2-guide.md. Back up first and import 003_record_lifecycle.sql ONCE before replacing code. Do not import schema.sql into an existing database. The patch preserves configuration, public entry paths and redirects, and updates the fixed public_html stylesheet too.
 
-For a NEW installation, download simbadove-global-logistics.zip and follow INSTALLATION.md inside. Dependencies are bundled. The full package includes the WhatsApp update.
+Adds Trash/restore/permanent delete for customers, staff, quotes, enquiries, tracking updates, shipments and shipment documents; account protections and private-file cleanup; current public location; pickup/departure UTC dates; country-only routes. WhatsApp remains linked to +23274976543.
 
-WhatsApp chat: https://wa.me/23274976543
+New installation: simbadove-global-logistics.zip includes the complete source, dependencies, latest schema, documentation and tests.
 
-Original full-suite validation applies to 1.0.0. Version 1.0.1 adds only the floating contact button; PHP syntax and rendered link/accessibility/cache checks passed. Verify the appearance and click on your staging site before launch.
+Validated locally: 14 original integration tests, eight lifecycle tests, foundation/content checks, old-schema upgrade, PHP syntax and a 27-table backup/restore. Browser QA for this update is not claimed. Apply acceptance checks from the update guide on hosting. No live production records have been modified by the assistant.
 
-The existing WordPress installation has not been changed. Actual data migration requires authorized exports and reconciliation. Disputed history/accreditation/statistics claims remain unpublished.
+Patch SHA-256: `89df4d31bd7e83d85e18112151d7370b0a1743395909030914ce77157184cfe1`
 
-Full ZIP SHA-256: `005654c336b2349b5623bea6497f1ad228f35985e6a3d13ff2e5a854b8fe2bf6`
+Full ZIP SHA-256: `5d299b450cb08e580ba1756d8b5d91f8585ff75f0079b041876ba563acaadc73`
