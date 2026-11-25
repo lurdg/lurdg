@@ -1,15 +1,15 @@
-# Simba Dove Global Logistics — 1.0.3
+# Simba Dove Global Logistics — 1.0.4
 
-Existing installation: download the cumulative simbadove-update-1.0.3.zip and follow simbadove-update-1.0.3-guide.md. Take backups; check schema_migrations and apply 003_record_lifecycle.sql then 004_tracking_map.sql only when not already applied. Never import the fresh-install schema into production.
+Existing installation: use cumulative simbadove-update-1.0.4.zip and simbadove-update-1.0.4-guide.md. No new SQL beyond migrations 003 and 004; an existing working 1.0.3 installation needs only code/assets replacement. Older installations must apply each missing prerequisite once. Never reimport the fresh-install schema into production.
 
-Adds a public Leaflet/OpenStreetMap map, explicit endpoint/event coordinates, planned connection, recorded public checkpoints and latest public position. Private/deleted coordinates are excluded; unknown locations are not guessed. Departure (UTC) replaces Created in the public tracking summary. Includes the earlier Trash/delete/restore, schedule and country-only route changes.
+Adds staff-triggered Photon place-name coordinate lookup, private caching, bounded requests, ambiguity selection and manual values; private updates/CSV/public views do not trigger automatic lookup. No API key is required. Photon public-demo reasonable-use limits and lack of SLA are documented in the guide; configure a suitable Photon-compatible HTTPS endpoint for higher traffic.
 
-Patch preserves private configuration, entry paths and redirects; public assets are supplied for both the source public/ directory and the actual public_html root. Leaflet is bundled with its license. No API key, GPS feed, automatic geocoding or road-route service is required/claimed.
+Adds an initially visible server-rendered OSM fallback; the interactive map replaces it only after initialization, visible dimensions and a successful tile load. Map URLs contain no shipment reference/customer identity. Departure (UTC), lifecycle controls, schedules, country-only routes and WhatsApp remain included.
 
-New installation: simbadove-global-logistics.zip includes the current complete source, schema, dependencies, tests and documentation.
+Public configuration, entry paths and redirects are preserved. Assets are supplied in both source public/ and live public_html paths. For a new install, the full simbadove-global-logistics.zip contains source, dependencies, schema, tests and guides.
 
-Validated locally: 26 main integration groups, foundation/content checks, JavaScript behavior tests with lightweight test doubles, syntax, populated-schema upgrade and 27-table backup/restore. Browser/rendering QA for this update is not claimed. Apply hosting acceptance checks from the guide. The assistant has not changed production records or deployed this update to hosting.
+Validated locally: 30 main integration groups, two JavaScript behavior suites, PHP syntax, populated-schema upgrade, 27-table backup/restore, real generic-city Photon lookup and fallback endpoint HTTP 200. Browser rendering/Namecheap outbound access must be checked after installation. The assistant has not deployed the update or changed the live shipment.
 
-Patch SHA-256: `5fb9665cb174d8ab39a39b908bc0a498461f55d59dfdb70e21830754d8af086a`
+Patch SHA-256: `703bf7913b0975671600e03600fa14bd3ea5db7ddebe2be66f891cb60aa59674`
 
-Full ZIP SHA-256: `c1e2ec76c3c13e59d1a9de0d7a491bcff93142ebf97bc0f01ea78dac31bb2bda`
+Full ZIP SHA-256: `378ea97f141a162755569a15e8efc577bfb54a70c9c75edb9ce8500542d62c24`
