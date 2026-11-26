@@ -11,9 +11,17 @@ document.querySelector('[data-print]')?.addEventListener('click', () => window.p
 document.querySelectorAll('form[data-geocode]').forEach((form) => {
     const button = form.querySelector('[data-find-location]');
     const results = form.querySelector('.geocode-results');
-    const location = form.elements.location;
+    const { location, latitude, longitude } = form.elements;
+    let generatedCoordinates = null;
 
-    location.addEventListener('input', () => results.replaceChildren());
+    location.addEventListener('input', () => {
+        results.replaceChildren();
+        if (generatedCoordinates && latitude.value === generatedCoordinates.latitude && longitude.value === generatedCoordinates.longitude) {
+            latitude.value = '';
+            longitude.value = '';
+        }
+        generatedCoordinates = null;
+    });
     button.addEventListener('click', async () => {
         const name = location.value.trim();
         if (!name) {
@@ -24,8 +32,9 @@ document.querySelectorAll('form[data-geocode]').forEach((form) => {
 
         function fillCoordinates(match) {
             location.value = match.name;
-            form.elements.latitude.value = match.latitude;
-            form.elements.longitude.value = match.longitude;
+            latitude.value = match.latitude;
+            longitude.value = match.longitude;
+            generatedCoordinates = {latitude: latitude.value, longitude: longitude.value};
             results.textContent = 'Coordinates filled in. Review the location before recording.';
         }
 

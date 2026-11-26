@@ -56,7 +56,7 @@ function tracking_page(): void
             <?php if ($shipment !== null): shipment_result($shipment); endif; ?>
         </div>
         <?php
-    }, $shipment !== null && $shipment['location'] !== null, is_post());
+    }, isset($shipment['location']['latitude'], $shipment['location']['longitude']), is_post());
 }
 
 function shipment_result(array $shipment): void
@@ -90,7 +90,9 @@ function shipment_result(array $shipment): void
             <p><strong><?= e($place['location'] ?: 'Recorded coordinates') ?></strong><br>
                 <time class="muted" datetime="<?= e(iso_datetime($place['occurred_at'])) ?>"><?= e(show_time($place['occurred_at'])) ?></time>
             </p>
-            <?php map_view($place['location'] ?: 'Recorded coordinates', $place['latitude'], $place['longitude']); ?>
+            <?php if (isset($place['latitude'], $place['longitude'])): ?>
+                <?php map_view($place['location'] ?: 'Recorded coordinates', $place['latitude'], $place['longitude']); ?>
+            <?php endif; ?>
         <?php endif; ?>
     </section>
     <section class="panel" aria-labelledby="tracking-history"><h2 id="tracking-history">Shipment progress</h2>

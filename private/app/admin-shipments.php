@@ -79,7 +79,7 @@ function shipment_action(array $user, array $shipment, string $action, ?int $rec
         redirect($back);
     } catch (ValidationError $error) {
         http_response_code(422);
-        shipment_details($user, shipment_for_staff($user, $id), $error->getMessage());
+        shipment_details($user, shipment_for_staff($user, $id), $error->getMessage(), $action === 'event' ? $_POST : []);
     }
 }
 
@@ -242,7 +242,7 @@ function shipment_edit(array $user, ?array $shipment): void
         $cancel = $id ? '/admin/shipments/' . $id . '/' : '/admin/shipments/';
         ?>
         <?php if ($shipment): ?><p class="muted">Tracking number <?= e($shipment['tracking_number']) ?>. Created <?= e(show_time($shipment['created_at'])) ?>.</p><?php endif; ?>
-        <form method="post" action="<?= e($url) ?>">
+        <form method="post" action="<?= e($url) ?>" data-geocode>
             <?= csrf_field() ?>
             <?php foreach ($groups as $heading => $names): ?>
                 <section class="panel"><h2><?= e($heading) ?></h2><div class="fields-grid">
@@ -264,6 +264,11 @@ function shipment_edit(array $user, ?array $shipment): void
                     <?php foreach ($customers as $customer): ?><option value="<?= e($customer['id']) ?>"<?= (string) $customer['id'] === (string) ($form['customer_id'] ?? '') ? ' selected' : '' ?>><?= e($customer['name']) ?></option><?php endforeach; ?>
                 </select></label>
             </div></section>
+            <section class="panel stack">
+                <h2><?= $id === null ? 'Initial location' : 'Tracking location' ?></h2>
+                <?php if ($id !== null): ?><p class="muted">Enter a location to add a tracking update. A location is required when changing the status.</p><?php endif; ?>
+                <?php html_location_fields($form); ?>
+            </section>
             <div class="admin-toolbar"><button class="button">Save shipment</button><a class="text-link" href="<?= e($cancel) ?>">Cancel</a></div>
         </form>
         <?php
@@ -276,7 +281,7 @@ function post_button(string $url, string $label, bool $confirm = false): void
         <?= csrf_field() ?><button class="button compact <?= $confirm ? 'danger' : 'secondary' ?>"><?= e($label) ?></button></form><?php
 }
 
-function shipment_details(array $user, array $shipment, string $message = ''): void
+function shipment_details(array $user, array $shipment, string $message = '', array $eventForm = []): void
 {
     $id = (int) $shipment['id'];
     $inactive = $shipment['archived_at'] !== null || $shipment['deleted_at'] !== null;
@@ -287,7 +292,7 @@ function shipment_details(array $user, array $shipment, string $message = ''): v
     $files = $user['role'] !== 'agent'
         ? query('SELECT id,display_name,byte_count FROM attachments WHERE shipment_id = ? ORDER BY id DESC LIMIT 100', [$id])->fetchAll() : [];
     $agent = $shipment['agent_id'] ? row('SELECT name FROM staff WHERE id = ?', [$shipment['agent_id']]) : null;
-    admin_layout($shipment['tracking_number'], $user, static function () use ($user, $shipment, $inactive, $canManage, $events, $files, $id, $agent, $eventsPage): void {
+    admin_layout($shipment['tracking_number'], $user, static function () use ($user, $shipment, $inactive, $canManage, $events, $files, $id, $agent, $eventsPage, $eventForm): void {
         $url = "/admin/shipments/$id/";
         ?>
         <div class="admin-toolbar">
@@ -310,7 +315,7 @@ function shipment_details(array $user, array $shipment, string $message = ''): v
                 <div><dt>Delivery agent</dt><dd><?= e($agent['name'] ?? 'Unassigned') ?></dd></div>
             </dl>
         </section>
-        <?php if (!$inactive && can($user, 'event')): shipment_event_form($user, $shipment, $url); endif; ?>
+        <?php if (!$inactive && can($user, 'event')): shipment_event_form($user, $shipment, $url, $eventForm); endif; ?>
         <section class="panel"><h2>Tracking history</h2>
             <?php if ($events === []): ?><p class="muted">No events on this page.</p><?php endif; ?>
             <ol class="timeline">
@@ -361,43 +366,44 @@ function shipment_details(array $user, array $shipment, string $message = ''): v
     }, $message, $message !== '');
 }
 
-function shipment_event_form(array $user, array $shipment, string $url): void
+function html_location_fields(array $form, bool $required = false): void
+{
+    ?>
+    <label>Location name<input name="location" maxlength="200" value="<?= e(input($form, 'location')) ?>"<?= $required ? ' required' : '' ?>></label>
+    <div><button type="button" class="button secondary" data-find-location>Generate coordinates</button></div>
+    <div class="geocode-results" aria-live="polite"></div>
+    <?php if (parse_url(config()['geocoder_url'] ?? '', PHP_URL_HOST) === 'nominatim.openstreetmap.org'): ?>
+        <small>Location search data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a></small>
+    <?php endif; ?>
+    <div class="fields-grid">
+        <label>Latitude<input name="latitude" type="number" step="any" min="-90" max="90" value="<?= e(input($form, 'latitude')) ?>"></label>
+        <label>Longitude<input name="longitude" type="number" step="any" min="-180" max="180" value="<?= e(input($form, 'longitude')) ?>"></label>
+    </div>
+    <?php
+}
+
+function shipment_event_form(array $user, array $shipment, string $url, array $form): void
 {
     $statuses = status_options();
     if ($user['role'] === 'agent') {
         $statuses = array_filter($statuses, static fn (array $status): bool => in_array($status['code'], ['out-for-delivery','delivered','attempted','exception'], true));
     }
     ?>
-    <div class="event-form-grid">
-        <section class="panel"><h2>Record status</h2>
-            <form class="stack" method="post" action="<?= e($url . 'event/') ?>">
-                <?= csrf_field() ?><input type="hidden" name="kind" value="status">
-                <?php html_status_choice($statuses, (int) $shipment['status_id']); ?>
-                <label>Event time (<?= e(site_zone()->getName()) ?>)<input type="datetime-local" name="occurred_at"></label>
-                <label>Location label<input name="location" maxlength="200"></label>
-                <label>Internal description<textarea name="description" maxlength="2500"></textarea></label>
-                <label>Customer-visible remarks<textarea name="customer_remarks" maxlength="2500"></textarea></label>
-                <button class="button">Record status</button>
-            </form>
-        </section>
-        <section class="panel"><h2>Record location</h2>
-            <form class="stack" method="post" action="<?= e($url . 'event/') ?>" data-geocode>
-                <?= csrf_field() ?><input type="hidden" name="kind" value="location">
-                <label>Location name<input name="location" maxlength="200" required></label>
-                <button type="button" class="button secondary" data-find-location>Generate coordinates</button>
-                <div class="geocode-results" aria-live="polite"></div>
-                <?php if (parse_url(config()['geocoder_url'] ?? '', PHP_URL_HOST) === 'nominatim.openstreetmap.org'): ?>
-                    <small>Location search data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a></small>
-                <?php endif; ?>
-                <div class="fields-grid"><label>Latitude<input name="latitude" type="number" step="any" min="-90" max="90" required></label>
-                <label>Longitude<input name="longitude" type="number" step="any" min="-180" max="180" required></label></div>
-                <label>Location time (<?= e(site_zone()->getName()) ?>)<input type="datetime-local" name="occurred_at"></label>
-                <label>Internal description<textarea name="description" maxlength="2500"></textarea></label>
-                <label>Customer-visible remarks<textarea name="customer_remarks" maxlength="2500"></textarea></label>
-                <button class="button">Record location</button>
-            </form>
-        </section>
-    </div>
+    <section class="panel"><h2>Add tracking update</h2>
+        <form class="stack" method="post" action="<?= e($url . 'event/') ?>" data-geocode>
+            <?= csrf_field() ?>
+            <div class="fields-grid">
+                <?php html_status_choice($statuses, (int) (input($form, 'status_id') ?: $shipment['status_id'])); ?>
+                <label>Event time (<?= e(site_zone()->getName()) ?>)<input type="datetime-local" name="occurred_at" value="<?= e(input($form, 'occurred_at')) ?>"></label>
+            </div>
+            <?php html_location_fields($form, true); ?>
+            <div class="fields-grid">
+                <label>Internal description<textarea name="description" maxlength="2500"><?= e(input($form, 'description')) ?></textarea></label>
+                <label>Customer-visible remarks<textarea name="customer_remarks" maxlength="2500"><?= e(input($form, 'customer_remarks')) ?></textarea></label>
+            </div>
+            <div><button class="button">Save tracking update</button></div>
+        </form>
+    </section>
     <?php
 }
 

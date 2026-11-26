@@ -123,6 +123,16 @@ function coordinates(string $latText, string $lonText): array
     return [sprintf('%.6F', (float) $latText), sprintf('%.6F', (float) $lonText)];
 }
 
+function event_location_fields(array $source, bool $required = false): array
+{
+    [$latitude, $longitude] = coordinates(input($source, 'latitude'), input($source, 'longitude'));
+    return [
+        'location' => value($source, 'location', 200, $required || $latitude !== null),
+        'latitude' => $latitude,
+        'longitude' => $longitude,
+    ];
+}
+
 function append_event(int $id, ?array $status, array $fields, ?array $actor): int
 {
     query('INSERT INTO shipment_events (shipment_id,kind,status_id,status_label,occurred_at,recorded_at,location,
@@ -164,7 +174,8 @@ function save_shipment(array $user, ?int $id, array $source): int
     if ($statusId === null) {
         throw new ValidationError('Select a shipment status.');
     }
-    return transaction(static function () use ($user, $id, $fields, $agent, $customer, $statusId): int {
+    $location = event_location_fields($source);
+    return transaction(static function () use ($user, $id, $fields, $agent, $customer, $statusId, $location): int {
         $current = $id ? shipment_for_staff($user, $id, true) : null;
         if ($current && ($current['deleted_at'] !== null || $current['archived_at'] !== null)) {
             throw new ValidationError('Restore or unarchive the shipment before editing.');
@@ -176,7 +187,10 @@ function save_shipment(array $user, ?int $id, array $source): int
         $fields['customer_id'] = $customer;
         $fields['updated_at'] = now_utc();
         $changedStatus = $current === null || (int) $current['status_id'] !== $statusId;
-        $status = $changedStatus ? pick_status($statusId) : null;
+        if ($current !== null && $changedStatus && $location['location'] === '') {
+            throw new ValidationError('Enter a location for the status update.');
+        }
+        $status = $changedStatus || $location['location'] !== '' ? pick_status($statusId) : null;
         if ($id === null) {
             $fields['status_id'] = $statusId;
             $fields['created_at'] = $fields['updated_at'];
@@ -186,7 +200,7 @@ function save_shipment(array $user, ?int $id, array $source): int
             query('INSERT INTO shipments (' . implode(',', $columns) . ') VALUES ('
                 . implode(',', array_fill(0, count($columns), '?')) . ')', array_values($fields));
             $id = (int) db()->lastInsertId();
-            append_event($id, $status, ['occurred_at' => $fields['created_at']], $user);
+            append_event($id, $status, ['occurred_at' => $fields['created_at']] + $location, $user);
             record_audit($user, 'created shipment', 'shipment', $id);
             notify_shipment($fields + ['id' => $id], 'Shipment created', 'We have registered your shipment. Its current status is ' . $status['label'] . '.');
             return $id;
@@ -195,7 +209,7 @@ function save_shipment(array $user, ?int $id, array $source): int
         query('UPDATE shipments SET ' . implode(',', $assignments) . ' WHERE id = ?', [...array_values($fields), $id]);
         record_audit($user, 'edited shipment', 'shipment', $id);
         if ($status !== null) {
-            apply_status_event($current + ['id' => $id], $status, [], $user, $fields + $current);
+            apply_status_event($current, $status, $location, $user, $fields + $current);
         }
         return $id;
     });
@@ -210,30 +224,29 @@ function apply_status_event(array $shipment, array $status, array $fields, array
     $changed = (int) $latest['status_id'] !== (int) $shipment['status_id'];
     if ($changed) {
         notify_shipment($notificationShipment, $latest['status_label'], 'Your shipment status is now ' . $latest['status_label'] . '.');
+    } elseif (isset($fields['latitude'])) {
+        $time = show_time($fields['occurred_at'] ?? now_utc());
+        notify_shipment($notificationShipment, 'Shipment location update', 'A new shipment location was recorded on ' . $time . '.');
     }
 }
 
 function save_event(array $user, int $id, array $source): void
 {
     require_permission($user, 'event');
-    $kind = input($source, 'kind');
-    if (!in_array($kind, ['status', 'location'], true)) {
-        throw new ValidationError('Choose the type of tracking update.');
-    }
     $time = input_datetime(input($source, 'occurred_at')) ?? now_utc();
     if ($time > now_utc()) {
         throw new ValidationError('An update cannot be dated in the future.');
     }
-    [$latitude, $longitude] = coordinates(input($source, 'latitude'), input($source, 'longitude'));
-    if ($kind === 'location' && $latitude === null) {
-        throw new ValidationError('Enter or look up coordinates for a location update.');
-    }
     $fields = [
-        'occurred_at' => $time, 'location' => value($source, 'location', 200, $kind === 'location'),
-        'latitude' => $latitude, 'longitude' => $longitude, 'description' => value($source, 'description', 2500),
+        'occurred_at' => $time,
+        'description' => value($source, 'description', 2500),
         'customer_remarks' => value($source, 'customer_remarks', 2500),
-    ];
-    transaction(static function () use ($user, $id, $source, $fields, $kind): void {
+    ] + event_location_fields($source, true);
+    $statusId = int_input(input($source, 'status_id'), 1, 4294967295);
+    if ($statusId === null) {
+        throw new ValidationError('Select a shipment status.');
+    }
+    transaction(static function () use ($user, $id, $statusId, $fields): void {
         $shipment = shipment_for_staff($user, $id, true);
         if ($shipment['deleted_at'] !== null || $shipment['archived_at'] !== null) {
             throw new ValidationError('Updates can only be added to active shipments.');
@@ -241,18 +254,11 @@ function save_event(array $user, int $id, array $source): void
         if ($fields['occurred_at'] < $shipment['created_at']) {
             throw new ValidationError('The update cannot predate shipment creation.');
         }
-        if ($kind === 'status') {
-            $status = pick_status((int) int_input(input($source, 'status_id'), 1, 4294967295));
-            if ($user['role'] === 'agent' && !in_array($status['code'], ['out-for-delivery','delivered','attempted','exception'], true)) {
-                throw new HttpError(403, 'Delivery agents can submit delivery statuses only.');
-            }
-            apply_status_event($shipment, $status, $fields, $user, $shipment);
-            return;
+        $status = pick_status($statusId);
+        if ($user['role'] === 'agent' && !in_array($status['code'], ['out-for-delivery','delivered','attempted','exception'], true)) {
+            throw new HttpError(403, 'Delivery agents can submit delivery statuses only.');
         }
-        append_event($id, null, $fields, $user);
-        query('UPDATE shipments SET updated_at = ? WHERE id = ?', [now_utc(), $id]);
-        record_audit($user, 'recorded location', 'shipment', $id);
-        notify_shipment($shipment, 'Shipment location update', 'A new shipment location was recorded on ' . show_time($fields['occurred_at']) . '.');
+        apply_status_event($shipment, $status, $fields, $user, $shipment);
     });
 }
 
@@ -328,9 +334,10 @@ function public_shipment(string $number, int $page = 1): ?array
     $shipment['events'] = array_slice($events, 0, 50);
     $shipment['history_page'] = $page;
     $shipment['older_events'] = count($events) > 50;
-    $shipment['location'] = row('SELECT latitude,longitude,location,occurred_at FROM shipment_events
-        WHERE shipment_id = ? AND deleted_at IS NULL AND latitude IS NOT NULL AND longitude IS NOT NULL
-        ORDER BY occurred_at DESC,id DESC LIMIT 1', [$shipId]);
+    $shipment['location'] = row("SELECT latitude,longitude,location,occurred_at FROM shipment_events
+        WHERE shipment_id = ? AND deleted_at IS NULL
+        AND (location <> '' OR (latitude IS NOT NULL AND longitude IS NOT NULL))
+        ORDER BY occurred_at DESC,id DESC LIMIT 1", [$shipId]);
     unset($shipment['id']);
     return $shipment;
 }

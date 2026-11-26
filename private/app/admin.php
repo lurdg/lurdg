@@ -18,9 +18,9 @@ function admin_layout(string $title, ?array $user, callable $body, string $messa
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= e($title) ?> | Afrilink Operations</title>
-<link rel="stylesheet" href="/assets/site.css"><link rel="stylesheet" href="/assets/admin.css">
+<link rel="stylesheet" href="/assets/site.css"><link rel="stylesheet" href="/assets/admin.css?v=3">
 <link rel="icon" href="/assets/afrilink.png" type="image/png">
-<script defer src="/assets/admin.js?v=2"></script>
+<script defer src="/assets/admin.js?v=3"></script>
 </head><body class="admin-page">
 <a class="skip" href="#main">Skip to content</a>
 <header class="admin-header"><div class="wrap">
