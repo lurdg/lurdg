@@ -6,11 +6,6 @@ function tracking_key(string $number): string
     return keyed_digest('tracking', mb_strtoupper(trim($number), 'UTF-8'));
 }
 
-function verification_key(string $code): string
-{
-    return keyed_digest('verification', strtoupper(trim($code)));
-}
-
 function new_tracking_number(): string
 {
     return setting('tracking_prefix') . '-' . strtoupper(bin2hex(random_bytes(12)));
@@ -317,38 +312,14 @@ function lifecycle(array $user, int $id, string $action): void
     }
 }
 
-function issue_ship_code(array $user, int $id): string
+function public_shipment(string $number, int $page = 1): ?array
 {
-    require_permission($user, 'manage-shipments');
-    return transaction(static function () use ($user, $id): string {
-        $shipment = shipment_for_staff($user, $id, true);
-        if ($shipment['deleted_at'] !== null) {
-            throw new ValidationError('Restore the shipment before issuing a verification code.');
-        }
-        $code = strtoupper(bin2hex(random_bytes(8)));
-        query('UPDATE shipments SET verification_key = ? WHERE id = ?', [verification_key($code), $id]);
-        record_audit($user, 'issued verification code', 'shipment', $id);
-        return $code;
-    });
-}
-
-function public_shipment(string $number, string $verification, int $page = 1): ?array
-{
-    $shipment = row('SELECT s.id,s.tracking_number,s.verification_key,s.legacy,s.shipper_name,s.receiver_name,
+    $shipment = row('SELECT s.id,s.tracking_number,s.shipper_name,s.shipper_address,s.receiver_name,s.receiver_address,
         s.origin,s.destination,s.created_at,s.estimated_delivery,s.category,s.method,s.weight,s.packages,
         s.public_notes,t.label AS status_label,t.bucket FROM shipments s JOIN statuses t ON t.id = s.status_id
         WHERE s.lookup_key = ? AND s.deleted_at IS NULL', [tracking_key($number)]);
     if ($shipment === null) {
         return null;
-    }
-    $verified = $verification !== '' && $shipment['verification_key'] !== null
-        && hash_equals($shipment['verification_key'], verification_key($verification));
-    if ($shipment['legacy'] && !$verified) {
-        $shipment['shipper_name'] = $shipment['receiver_name'] = '';
-    } elseif (!$verified) {
-        foreach (['shipper_name', 'receiver_name'] as $key) {
-            $shipment[$key] = $shipment[$key] === '' ? '' : mb_substr($shipment[$key], 0, 1) . '…';
-        }
     }
     $shipId = $shipment['id'];
     $offset = ($page - 1) * 50;
@@ -360,8 +331,7 @@ function public_shipment(string $number, string $verification, int $page = 1): ?
     $shipment['location'] = row('SELECT latitude,longitude,location,occurred_at FROM shipment_events
         WHERE shipment_id = ? AND deleted_at IS NULL AND latitude IS NOT NULL AND longitude IS NOT NULL
         ORDER BY occurred_at DESC,id DESC LIMIT 1', [$shipId]);
-    $shipment['verification_failed'] = $verification !== '' && !$verified;
-    unset($shipment['id'], $shipment['verification_key'], $shipment['legacy']);
+    unset($shipment['id']);
     return $shipment;
 }
 

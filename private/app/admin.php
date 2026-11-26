@@ -20,7 +20,7 @@ function admin_layout(string $title, ?array $user, callable $body, string $messa
 <title><?= e($title) ?> | Afrilink Operations</title>
 <link rel="stylesheet" href="/assets/site.css"><link rel="stylesheet" href="/assets/admin.css">
 <link rel="icon" href="/assets/afrilink.png" type="image/png">
-<script defer src="/assets/admin.js"></script>
+<script defer src="/assets/admin.js?v=2"></script>
 </head><body class="admin-page">
 <a class="skip" href="#main">Skip to content</a>
 <header class="admin-header"><div class="wrap">

@@ -30,7 +30,7 @@ When WPCargo shows a current status that differs from the latest history row, ve
 
 Confirm the WordPress timezone under **Settings → General** and whether the plugin uses it for tracking history. Normalize the time text before applying offsets. A time such as **16:00 pm** already uses a 24-hour hour value. A departure time without a date is insufficient to construct a stored departure timestamp. Keep cropped input values and remarks pending source verification.
 
-The optional **attachments** array contains **path** relative to the reviewed files directory, **sha256**, and optional **name**. Use one stable input format and retain authenticated custody of the source files and mappings. Imported shipments keep their original tracking numbers. Public lookup uses case-insensitive matching and shows party names only with a new verification code for legacy records. Case or whitespace collisions require manual reconciliation.
+The optional **attachments** array contains **path** relative to the reviewed files directory, **sha256**, and optional **name**. Use one stable input format and retain authenticated custody of the source files and mappings. Imported shipments keep their original tracking numbers. Public lookup uses case-insensitive matching and shows the sender and receiver names and addresses saved for each shipment. Case or whitespace collisions require manual reconciliation.
 
 ## Dry run, apply and verify
 
@@ -43,7 +43,7 @@ php bin/import-history.php --file=/private/reviewed/shipments.jsonl --attachment
 
 Without **--apply**, the database transaction is rolled back and files are validated without copying. An exact retry of a committed batch skips identical source rows. A changed source row or tracking collision stops the batch. Use the line number to reconcile the source, then retry. Email notifications are not queued during the import.
 
-Reconcile all source shipment, history and attachment totals. Verify orders, statuses, dates and attachment checksums. Test representative tracking numbers, including numbers with leading zeros. Keep exceptions and sign-off with the migration records. Issue secondary verification codes only through approved customer contact channels.
+Reconcile all source shipment, history and attachment totals. Verify orders, statuses, dates and attachment checksums. Test representative tracking numbers, including numbers with leading zeros. Check the sender and receiver details on the tracking page and confirm contact details and internal remarks remain private. Keep exceptions and sign-off with the migration records.
 
 ## Cutover and rollback
 

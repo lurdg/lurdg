@@ -480,11 +480,11 @@ function geocode_route(array $user): void
     require_permission($user,'event');
     header('Content-Type: application/json; charset=utf-8');
     try {
-        if (config()['geocoder_url'] === '') {
+        if ((config()['geocoder_url'] ?? '') === '') {
             throw new ValidationError('Location lookup is not configured. Enter coordinates manually.');
         }
         rate_limit('geocode-user', (string) $user['id'], 15, 60);
-        $place = value($_POST,'location',180,true);
+        $place = value($_POST,'location',200,true);
         $key = keyed_digest('geocode', mb_strtolower($place));
         $cached = row('SELECT candidates FROM geocode_cache WHERE query_key = ? AND expires_at > UTC_TIMESTAMP(6)', [$key]);
         if ($cached !== null) {

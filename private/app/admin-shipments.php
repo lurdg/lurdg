@@ -65,10 +65,6 @@ function shipment_action(array $user, array $shipment, string $action, ?int $rec
                     redirect('/admin/shipments/?state=trash');
                 }
                 break;
-            case 'code':
-                $code = issue_ship_code($user, $id);
-                flash('Share this new verification code privately with the customer. It is shown once. ' . $code);
-                break;
             case 'upload':
                 upload_attachment($user, $id, $_FILES['attachment'] ?? []);
                 flash('Document uploaded.');
@@ -357,7 +353,6 @@ function shipment_details(array $user, array $shipment, string $message = ''): v
                 <?php else: ?>
                     <?php post_button($url . ($shipment['archived_at'] !== null ? 'unarchive/' : 'archive/'), $shipment['archived_at'] !== null ? 'Unarchive' : 'Archive'); ?>
                     <?php post_button($url . 'trash/', 'Move to trash', true); ?>
-                    <?php post_button($url . 'code/', 'Issue verification code', $shipment['verification_key'] !== null); ?>
                 <?php endif; ?>
                 </div>
             </section>
@@ -389,7 +384,11 @@ function shipment_event_form(array $user, array $shipment, string $url): void
             <form class="stack" method="post" action="<?= e($url . 'event/') ?>" data-geocode>
                 <?= csrf_field() ?><input type="hidden" name="kind" value="location">
                 <label>Location name<input name="location" maxlength="200" required></label>
-                <?php if (config()['geocoder_url'] !== ''): ?><button type="button" class="button secondary" data-find-location>Find coordinates</button><div class="geocode-results" aria-live="polite"></div><?php endif; ?>
+                <button type="button" class="button secondary" data-find-location>Generate coordinates</button>
+                <div class="geocode-results" aria-live="polite"></div>
+                <?php if (parse_url(config()['geocoder_url'] ?? '', PHP_URL_HOST) === 'nominatim.openstreetmap.org'): ?>
+                    <small>Location search data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a></small>
+                <?php endif; ?>
                 <div class="fields-grid"><label>Latitude<input name="latitude" type="number" step="any" min="-90" max="90" required></label>
                 <label>Longitude<input name="longitude" type="number" step="any" min="-180" max="180" required></label></div>
                 <label>Location time (<?= e(site_zone()->getName()) ?>)<input type="datetime-local" name="occurred_at"></label>

@@ -157,7 +157,7 @@ function service_cards(): void
     </div><?php
 }
 
-function tracking_form(string $number = '', bool $withCode = false): void
+function tracking_form(string $number = ''): void
 {
     ?>
     <form class="tracking-form" method="post" action="/track/" data-loading>
@@ -166,7 +166,6 @@ function tracking_form(string $number = '', bool $withCode = false): void
             <label for="tracking-number">Tracking number<input id="tracking-number" name="tracking_number" value="<?= e($number) ?>" placeholder="Enter your tracking number" maxlength="96" autocomplete="off" spellcheck="false" required></label>
             <button class="button" type="submit" data-loading-label="Checking shipment"><?= icon('search', 19) ?> Track shipment</button>
         </div>
-        <?php if ($withCode): ?><label class="check-code" for="verification-code">Verification code <span>(optional)</span><input id="verification-code" name="verification_code" maxlength="64" autocomplete="off" spellcheck="false" placeholder="Enter code to view party names"></label><?php endif; ?>
     </form>
     <?php
 }

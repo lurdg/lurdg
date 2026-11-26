@@ -31,14 +31,11 @@ function tracking_page(): void
             if (!preg_match('/\A[\p{L}\p{N}][\p{L}\p{N} ._\/-]*\z/u', $number) || input($_POST, 'office_fax') !== '') {
                 throw new ValidationError('Enter the tracking number exactly as provided.');
             }
-            $code = value($_POST, 'verification_code', 64);
             $historyPage = max(1, min(10000, (int) input($_POST, 'history_page')));
-            $shipment = public_shipment($number, $code, $historyPage);
+            $shipment = public_shipment($number, $historyPage);
             if ($shipment === null) {
                 http_response_code(404);
                 $message = 'We couldn’t find that shipment. Check your tracking number and try again.';
-            } elseif ($shipment['verification_failed']) {
-                $message = 'That verification code did not match. Check the code provided by Afrilink.';
             }
         } catch (ValidationError $error) {
             http_response_code(422);
@@ -54,7 +51,7 @@ function tracking_page(): void
             <section class="panel lookup-panel" aria-labelledby="lookup-title">
                 <h2 id="lookup-title">Shipment lookup</h2>
                 <?php if ($message !== ''): ?><p class="notice error" role="alert"><?= e($message) ?></p><?php endif; ?>
-                <?php tracking_form($number, true); ?>
+                <?php tracking_form($number); ?>
             </section>
             <?php if ($shipment !== null): shipment_result($shipment); endif; ?>
         </div>
@@ -68,7 +65,8 @@ function shipment_result(array $shipment): void
         'Origin' => $shipment['origin'], 'Destination' => $shipment['destination'],
         'Shipment created' => show_time($shipment['created_at'], 'j M Y'),
         'Estimated delivery' => date_label($shipment['estimated_delivery']),
-        'Sender' => $shipment['shipper_name'], 'Receiver' => $shipment['receiver_name'],
+        'Sender' => $shipment['shipper_name'], 'Sender address' => $shipment['shipper_address'],
+        'Receiver' => $shipment['receiver_name'], 'Receiver address' => $shipment['receiver_address'],
         'Shipment category' => $shipment['category'], 'Shipping method' => $shipment['method'],
         'Weight' => $shipment['weight'] === null ? '' : rtrim(rtrim((string) $shipment['weight'], '0'), '.') . ' kg',
         'Packages' => $shipment['packages'] === null ? '' : (string) $shipment['packages'],
@@ -79,7 +77,7 @@ function shipment_result(array $shipment): void
             <span class="badge <?= e($shipment['bucket']) ?>"><?= e($shipment['status_label']) ?></span></div>
         <dl class="facts">
         <?php foreach ($facts as $label => $detail): ?>
-            <?php if ($detail !== ''): ?><div><dt><?= e($label) ?></dt><dd><?= e($detail) ?></dd></div><?php endif; ?>
+            <?php if ($detail !== ''): ?><div><dt><?= e($label) ?></dt><dd class="preserve-lines"><?= e($detail) ?></dd></div><?php endif; ?>
         <?php endforeach; ?>
         </dl>
         <?php if ($shipment['public_notes'] !== ''): ?><div class="preserve-lines notice info"><?= e($shipment['public_notes']) ?></div><?php endif; ?>
