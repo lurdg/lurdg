@@ -370,7 +370,7 @@ function html_location_fields(array $form, bool $required = false): void
 {
     ?>
     <label>Location name<input name="location" maxlength="200" value="<?= e(input($form, 'location')) ?>"<?= $required ? ' required' : '' ?>></label>
-    <div><button type="button" class="button secondary" data-find-location>Generate coordinates</button></div>
+    <div><button type="button" class="button secondary" data-find-location>Find coordinates</button></div>
     <div class="geocode-results" aria-live="polite"></div>
     <?php if (parse_url(config()['geocoder_url'] ?? '', PHP_URL_HOST) === 'nominatim.openstreetmap.org'): ?>
         <small>Location search data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a></small>
@@ -389,8 +389,9 @@ function shipment_event_form(array $user, array $shipment, string $url, array $f
         $statuses = array_filter($statuses, static fn (array $status): bool => in_array($status['code'], ['out-for-delivery','delivered','attempted','exception'], true));
     }
     ?>
-    <section class="panel"><h2>Add tracking update</h2>
-        <form class="stack" method="post" action="<?= e($url . 'event/') ?>" data-geocode>
+    <section class="panel">
+        <h2 id="record-status-heading">Record status</h2>
+        <form class="stack" method="post" action="<?= e($url . 'event/') ?>" aria-labelledby="record-status-heading" data-geocode>
             <?= csrf_field() ?>
             <div class="fields-grid">
                 <?php html_status_choice($statuses, (int) (input($form, 'status_id') ?: $shipment['status_id'])); ?>
