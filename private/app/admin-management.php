@@ -477,41 +477,46 @@ function audit_page(array $user): void
 
 function geocode_route(array $user): void
 {
-    require_permission($user,'event');
     header('Content-Type: application/json; charset=utf-8');
     try {
-        if ((config()['geocoder_url'] ?? '') === '') {
-            throw new ValidationError('Location lookup is not configured. Enter coordinates manually.');
-        }
-        rate_limit('geocode-user', (string) $user['id'], 15, 60);
-        $place = value($_POST,'location',200,true);
-        $key = keyed_digest('geocode', mb_strtolower($place));
-        $cached = row('SELECT candidates FROM geocode_cache WHERE query_key = ? AND expires_at > UTC_TIMESTAMP(6)', [$key]);
-        if ($cached !== null) {
-            echo $cached['candidates'];
-            return;
-        }
-        $lock = 'afrilink-geocode-' . substr(hash('sha256',config()['db_name']),0,32);
-        if ((int) row('SELECT GET_LOCK(?,0) AS acquired',[$lock])['acquired'] !== 1) {
-            throw new ValidationError('Another location lookup is running. Try again in a moment.');
-        }
-        try {
-            $last = row("SELECT value FROM settings WHERE name = '_last_geocode'");
-            if ($last !== null && microtime(true) - (float) $last['value'] < 1.05) {
-                throw new ValidationError('Please wait a moment between location lookups.');
-            }
-            query("INSERT INTO settings (name,value) VALUES ('_last_geocode',?) ON DUPLICATE KEY UPDATE value = VALUES(value)", [(string) microtime(true)]);
-            $matches = geocode_fetch($place);
-            $result = json_encode(['matches' => $matches], JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE);
-            query('INSERT INTO geocode_cache (query_key,candidates,expires_at) VALUES (?,?,UTC_TIMESTAMP(6) + INTERVAL 7 DAY)
-                ON DUPLICATE KEY UPDATE candidates = VALUES(candidates), expires_at = VALUES(expires_at)', [$key,$result]);
-            echo $result;
-        } finally {
-            query('SELECT RELEASE_LOCK(?)',[$lock]);
-        }
+        $result = geocode_lookup($user, $_POST);
+        echo json_encode($result, JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE);
     } catch (ValidationError | HttpError $error) {
         http_response_code($error instanceof HttpError ? $error->status : 422);
         echo json_encode(['error' => $error->getMessage()]);
+    }
+}
+
+function geocode_lookup(array $user, array $source): array
+{
+    require_permission($user, 'event');
+    if ((config()['geocoder_url'] ?? '') === '') {
+        throw new ValidationError('Location lookup is not configured. Enter coordinates manually.');
+    }
+    rate_limit('geocode-user', (string) $user['id'], 15, 60);
+    $place = value($source, 'location', 200, true);
+    $key = keyed_digest('geocode', mb_strtolower($place));
+    $cached = row('SELECT candidates FROM geocode_cache WHERE query_key = ? AND expires_at > UTC_TIMESTAMP(6)', [$key]);
+    if ($cached !== null) {
+        return json_decode($cached['candidates'], true, 16, JSON_THROW_ON_ERROR);
+    }
+    $lock = 'afrilink-geocode-' . substr(hash('sha256', config()['db_name']), 0, 32);
+    if ((int) row('SELECT GET_LOCK(?,0) AS acquired', [$lock])['acquired'] !== 1) {
+        throw new ValidationError('Another location lookup is running. Try again in a moment.');
+    }
+    try {
+        $last = row("SELECT value FROM settings WHERE name = '_last_geocode'");
+        if ($last !== null && microtime(true) - (float) $last['value'] < 1.05) {
+            throw new ValidationError('Please wait a moment between location lookups.');
+        }
+        query("INSERT INTO settings (name,value) VALUES ('_last_geocode',?) ON DUPLICATE KEY UPDATE value = VALUES(value)", [(string) microtime(true)]);
+        $result = ['matches' => geocode_fetch($place)];
+        query('INSERT INTO geocode_cache (query_key,candidates,expires_at) VALUES (?,?,UTC_TIMESTAMP(6) + INTERVAL 7 DAY)
+            ON DUPLICATE KEY UPDATE candidates = VALUES(candidates), expires_at = VALUES(expires_at)',
+            [$key, json_encode($result, JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE)]);
+        return $result;
+    } finally {
+        query('SELECT RELEASE_LOCK(?)', [$lock]);
     }
 }
 
@@ -521,12 +526,12 @@ function geocode_fetch(string $place): array
     if (parse_url($endpoint, PHP_URL_SCHEME) !== 'https' || !extension_loaded('curl')) {
         throw new ValidationError('Location lookup is unavailable. Enter coordinates manually.');
     }
-    $contact = config()['geocoder_contact'];
+    $contact = config()['geocoder_contact'] ?? '';
     $url = $endpoint . (str_contains($endpoint,'?') ? '&' : '?') . http_build_query(['q' => $place,'format' => 'jsonv2','limit' => 5]);
     $handle = curl_init($url);
     $raw = '';
     curl_setopt_array($handle, [CURLOPT_CONNECTTIMEOUT => 3, CURLOPT_TIMEOUT => 6, CURLOPT_FOLLOWLOCATION => false,
-        CURLOPT_PROTOCOLS_STR => 'HTTPS', CURLOPT_USERAGENT => 'AfrilinkShipmentGeocoder/1.0 ' . base_url() . ' ' . $contact,
+        CURLOPT_USERAGENT => 'AfrilinkShipmentGeocoder/1.0 ' . base_url() . ' ' . $contact,
         CURLOPT_HTTPHEADER => ['Accept: application/json'],
         CURLOPT_WRITEFUNCTION => static function ($handle, string $chunk) use (&$raw): int {
             if (strlen($raw) + strlen($chunk) > 60000) {
@@ -539,6 +544,7 @@ function geocode_fetch(string $place): array
     $status = curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
     $rows = $ok && $status === 200 ? json_decode($raw,true) : null;
     if (!is_array($rows)) {
+        error_log('Afrilink location lookup failed. Provider HTTP ' . $status . ', cURL ' . curl_errno($handle) . '.');
         throw new ValidationError('Location lookup is unavailable. Enter coordinates manually.');
     }
     $matches = [];

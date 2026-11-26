@@ -12,7 +12,9 @@ document.querySelectorAll('form[data-geocode]').forEach((form) => {
     const button = form.querySelector('[data-find-location]');
     const results = form.querySelector('.geocode-results');
     const { location, latitude, longitude } = form.elements;
-    let generatedCoordinates = null;
+    let generatedCoordinates = results.hasAttribute('data-coordinates-filled')
+        ? {latitude: latitude.value, longitude: longitude.value}
+        : null;
 
     location.addEventListener('input', () => {
         results.replaceChildren();
@@ -22,7 +24,9 @@ document.querySelectorAll('form[data-geocode]').forEach((form) => {
         }
         generatedCoordinates = null;
     });
-    button.addEventListener('click', async () => {
+    button.addEventListener('click', async (event) => {
+        if (typeof fetch !== 'function' || typeof form.requestSubmit !== 'function') return;
+        event.preventDefault();
         const name = location.value.trim();
         if (!name) {
             results.textContent = 'Enter a place name first.';
@@ -65,7 +69,12 @@ document.querySelectorAll('form[data-geocode]').forEach((form) => {
             }
         } catch (error) {
             if (location.value.trim() === name) {
-                results.textContent = error instanceof SyntaxError ? 'Location lookup is currently unavailable.' : error.message;
+                if (error instanceof TypeError || error instanceof SyntaxError) {
+                    button.disabled = false;
+                    form.requestSubmit(button);
+                } else {
+                    results.textContent = error.message;
+                }
             }
         } finally {
             button.disabled = false;

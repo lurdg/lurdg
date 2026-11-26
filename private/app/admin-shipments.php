@@ -43,6 +43,14 @@ function shipment_action(array $user, array $shipment, string $action, ?int $rec
     try {
         switch ($action) {
             case 'event':
+                if (array_key_exists('coordinate_lookup', $_POST)) {
+                    if ($shipment['archived_at'] !== null || $shipment['deleted_at'] !== null) {
+                        throw new ValidationError('Updates can only be added to active shipments.');
+                    }
+                    [$form, $lookup] = shipment_location_lookup($user, $_POST);
+                    shipment_details($user, $shipment, '', $form, $lookup);
+                    return;
+                }
                 save_event($user, $id, $_POST);
                 flash('Tracking update recorded.');
                 break;
@@ -207,7 +215,8 @@ function shipment_edit(array $user, ?array $shipment): void
     }
     $url = $id === null ? '/admin/shipments/new/' : '/admin/shipments/' . $id . '/edit/';
     $message = '';
-    if (is_post()) {
+    $searching = is_post() && array_key_exists('coordinate_lookup', $_POST);
+    if (is_post() && !$searching) {
         try {
             $saved = save_shipment($user, $id, $_POST);
             flash($id ? 'Shipment updated.' : 'Shipment created.');
@@ -231,7 +240,11 @@ function shipment_edit(array $user, ?array $shipment): void
         $customers[] = $linked;
     }
     $form = is_post() ? $_POST : ($shipment ?? ['status_id' => $initialStatus['id']]);
-    admin_layout($id ? 'Edit shipment' : 'Create shipment', $user, static function () use ($shipment, $url, $statuses, $agents, $customers, $form, $id): void {
+    $lookup = [];
+    if ($searching) {
+        [$form, $lookup] = shipment_location_lookup($user, $form);
+    }
+    admin_layout($id ? 'Edit shipment' : 'Create shipment', $user, static function () use ($shipment, $url, $statuses, $agents, $customers, $form, $id, $lookup): void {
         $fields = shipment_fields();
         $groups = [
             'Shipment' => ['reference','origin','destination','method','category','packages','weight','dimensions','description'],
@@ -267,7 +280,7 @@ function shipment_edit(array $user, ?array $shipment): void
             <section class="panel stack">
                 <h2><?= $id === null ? 'Initial location' : 'Tracking location' ?></h2>
                 <?php if ($id !== null): ?><p class="muted">Enter a location to add a tracking update. A location is required when changing the status.</p><?php endif; ?>
-                <?php html_location_fields($form); ?>
+                <?php html_location_fields($form, false, $lookup); ?>
             </section>
             <div class="admin-toolbar"><button class="button">Save shipment</button><a class="text-link" href="<?= e($cancel) ?>">Cancel</a></div>
         </form>
@@ -281,7 +294,7 @@ function post_button(string $url, string $label, bool $confirm = false): void
         <?= csrf_field() ?><button class="button compact <?= $confirm ? 'danger' : 'secondary' ?>"><?= e($label) ?></button></form><?php
 }
 
-function shipment_details(array $user, array $shipment, string $message = '', array $eventForm = []): void
+function shipment_details(array $user, array $shipment, string $message = '', array $eventForm = [], array $lookup = []): void
 {
     $id = (int) $shipment['id'];
     $inactive = $shipment['archived_at'] !== null || $shipment['deleted_at'] !== null;
@@ -292,7 +305,7 @@ function shipment_details(array $user, array $shipment, string $message = '', ar
     $files = $user['role'] !== 'agent'
         ? query('SELECT id,display_name,byte_count FROM attachments WHERE shipment_id = ? ORDER BY id DESC LIMIT 100', [$id])->fetchAll() : [];
     $agent = $shipment['agent_id'] ? row('SELECT name FROM staff WHERE id = ?', [$shipment['agent_id']]) : null;
-    admin_layout($shipment['tracking_number'], $user, static function () use ($user, $shipment, $inactive, $canManage, $events, $files, $id, $agent, $eventsPage, $eventForm): void {
+    admin_layout($shipment['tracking_number'], $user, static function () use ($user, $shipment, $inactive, $canManage, $events, $files, $id, $agent, $eventsPage, $eventForm, $lookup): void {
         $url = "/admin/shipments/$id/";
         ?>
         <div class="admin-toolbar">
@@ -315,7 +328,7 @@ function shipment_details(array $user, array $shipment, string $message = '', ar
                 <div><dt>Delivery agent</dt><dd><?= e($agent['name'] ?? 'Unassigned') ?></dd></div>
             </dl>
         </section>
-        <?php if (!$inactive && can($user, 'event')): shipment_event_form($user, $shipment, $url, $eventForm); endif; ?>
+        <?php if (!$inactive && can($user, 'event')): shipment_event_form($user, $shipment, $url, $eventForm, $lookup); endif; ?>
         <section class="panel"><h2>Tracking history</h2>
             <?php if ($events === []): ?><p class="muted">No events on this page.</p><?php endif; ?>
             <ol class="timeline">
@@ -366,12 +379,57 @@ function shipment_details(array $user, array $shipment, string $message = '', ar
     }, $message, $message !== '');
 }
 
-function html_location_fields(array $form, bool $required = false): void
+function shipment_location_lookup(array $user, array $form): array
+{
+    $place = input($form, 'location');
+    $choice = input($form, 'coordinate_lookup');
+    try {
+        if ($place === '') {
+            throw new ValidationError('Enter a place name first.');
+        }
+        if ($choice !== 'find' && (!ctype_digit($choice) || $place !== input($form, 'lookup_place'))) {
+            throw new ValidationError('Search for the location again to choose a match.');
+        }
+        $matches = geocode_lookup($user, $form)['matches'];
+        if ($matches === []) {
+            return [$form, ['message' => 'No matches found. Try adding a city or country, or enter coordinates manually.']];
+        }
+        if ($choice === 'find' && count($matches) > 1) {
+            return [$form, [
+                'message' => 'Choose a matching location to fill in the coordinates.',
+                'place' => $place,
+                'matches' => $matches,
+            ]];
+        }
+        $match = $matches[$choice === 'find' ? 0 : (int) $choice] ?? null;
+        if ($match === null) {
+            throw new ValidationError('Search for the location again to choose a match.');
+        }
+        return [array_replace($form, [
+            'location' => $match['name'],
+            'latitude' => $match['latitude'],
+            'longitude' => $match['longitude'],
+        ]), ['message' => 'Coordinates filled in. Review the location before recording.', 'filled' => true]];
+    } catch (ValidationError | HttpError $error) {
+        http_response_code($error instanceof HttpError ? $error->status : 422);
+        return [$form, ['message' => $error->getMessage()]];
+    }
+}
+
+function html_location_fields(array $form, bool $required, array $lookup): void
 {
     ?>
     <label>Location name<input name="location" maxlength="200" value="<?= e(input($form, 'location')) ?>"<?= $required ? ' required' : '' ?>></label>
-    <div><button type="button" class="button secondary" data-find-location>Find coordinates</button></div>
-    <div class="geocode-results" aria-live="polite"></div>
+    <div><button type="submit" class="button secondary" name="coordinate_lookup" value="find" formnovalidate data-find-location>Find coordinates</button></div>
+    <div class="geocode-results" aria-live="polite"<?= $lookup !== [] ? ' tabindex="-1" autofocus' : '' ?><?= !empty($lookup['filled']) ? ' data-coordinates-filled' : '' ?>>
+        <?= e($lookup['message'] ?? '') ?>
+        <?php if (isset($lookup['matches'])): ?>
+            <input type="hidden" name="lookup_place" value="<?= e($lookup['place']) ?>">
+            <?php foreach ($lookup['matches'] as $index => $match): ?>
+                <button type="submit" class="geocode-choice" name="coordinate_lookup" value="<?= e($index) ?>" formnovalidate><?= e($match['name']) ?></button>
+            <?php endforeach; ?>
+        <?php endif; ?>
+    </div>
     <?php if (parse_url(config()['geocoder_url'] ?? '', PHP_URL_HOST) === 'nominatim.openstreetmap.org'): ?>
         <small>Location search data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a></small>
     <?php endif; ?>
@@ -382,7 +440,7 @@ function html_location_fields(array $form, bool $required = false): void
     <?php
 }
 
-function shipment_event_form(array $user, array $shipment, string $url, array $form): void
+function shipment_event_form(array $user, array $shipment, string $url, array $form, array $lookup): void
 {
     $statuses = status_options();
     if ($user['role'] === 'agent') {
@@ -397,7 +455,7 @@ function shipment_event_form(array $user, array $shipment, string $url, array $f
                 <?php html_status_choice($statuses, (int) (input($form, 'status_id') ?: $shipment['status_id'])); ?>
                 <label>Event time (<?= e(site_zone()->getName()) ?>)<input type="datetime-local" name="occurred_at" value="<?= e(input($form, 'occurred_at')) ?>"></label>
             </div>
-            <?php html_location_fields($form, true); ?>
+            <?php html_location_fields($form, true, $lookup); ?>
             <div class="fields-grid">
                 <label>Internal description<textarea name="description" maxlength="2500"><?= e(input($form, 'description')) ?></textarea></label>
                 <label>Customer-visible remarks<textarea name="customer_remarks" maxlength="2500"><?= e(input($form, 'customer_remarks')) ?></textarea></label>

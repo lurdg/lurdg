@@ -43,6 +43,8 @@ Shipment maps use Leaflet and OpenStreetMap tiles. The tracking page shows the l
 
 To activate **Find coordinates**, set `geocoder_url` to an HTTPS Nominatim-compatible search endpoint and `geocoder_contact` to a business email in private `config.php`. The public Nominatim search endpoint, `https://nominatim.openstreetmap.org/search`, can be used for low-volume lookups of public locations within its usage policy. Enter public place names such as cities, airports or freight terminals when using that provider. The application caches results and limits outbound lookup frequency. Staff can also enter coordinates manually. [Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/) · [OpenStreetMap tile policy](https://operations.osmfoundation.org/policies/tiles/)
 
+If a background lookup fails, **Find coordinates** runs the search through the shipment form and keeps the entered fields intact. The tracking update is saved when staff select **Save tracking update**. If the form reports that location lookup is unavailable, check the PHP error log for the provider HTTP status and cURL error number.
+
 ## Verify the install
 
 Test staff sign-in, shipment creation, a tracking update with status and location, public tracking on phone and desktop, a contact and quote submission, authorized CSV export and print output. Check the approved WhatsApp link, HTTPS, private file access, cron, SMTP and password reset. Verify backups restore on staging. Review **MIGRATION-WPCARGO.md** before enabling live traffic.
