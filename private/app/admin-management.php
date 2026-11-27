@@ -220,14 +220,22 @@ function statuses_page(array $user, ?int $id, string $error): void
             </tbody></table></div></section><?php endif; ?>
         <section class="panel"><h2><?= $id === null ? 'Add status' : 'Status details' ?></h2>
             <form class="stack" method="post" action="<?= e($url) ?>"><?= csrf_field() ?>
+                <?php if ($id === null): ?>
+                    <label>Status labels
+                        <textarea name="labels" rows="5" maxlength="5100" required><?= e(input($_POST, 'labels') ?: input($_POST, 'label')) ?></textarea>
+                    </label>
+                    <p class="muted">Enter one status per line, up to 50. The dashboard group, display order and availability apply to the batch.</p>
+                <?php endif; ?>
                 <div class="fields-grid">
-                    <?php management_fields(['label' => ['Status label','text',100], 'sort_order' => ['Display order','number',5]], $record); ?>
+                    <?php if ($id !== null): management_fields(['label' => ['Status label','text',100]], $record); endif; ?>
+                    <label>Display order<input type="number" name="sort_order" min="0" max="65535"
+                        value="<?= e(is_post() ? input($_POST, 'sort_order') : ($record['sort_order'] ?? 100)) ?>"></label>
                     <label>Dashboard group<select name="bucket"><?php foreach (status_buckets() as $key => $label): ?>
                         <option value="<?= e($key) ?>"<?= $key === (is_post() ? input($_POST,'bucket') : ($record['bucket'] ?? 'pending')) ? ' selected' : '' ?>><?= e($label) ?></option>
                     <?php endforeach; ?></select></label>
                 </div>
                 <label><input type="checkbox" name="active" value="1"<?= (is_post() ? input($_POST,'active') === '1' : ($record['active'] ?? true)) ? ' checked' : '' ?>>Available for new updates</label>
-                <button class="button">Save status</button>
+                <div><button class="button"><?= $id === null ? 'Add statuses' : 'Save status' ?></button></div>
             </form>
         </section>
         <?php if ($id !== null): ?><div class="admin-toolbar"><a class="text-link" href="/admin/statuses/">All statuses</a>
@@ -254,7 +262,6 @@ function save_status(array $user, ?int $id): string
             record_audit($user, $inUse ? 'retired status' : 'deleted status', 'status', $id, $old['label']);
             return $inUse ? 'Status retired. Existing shipment history still uses it.' : 'Status deleted.';
         }
-        $label = value($_POST,'label',100,true);
         $bucket = input($_POST,'bucket');
         $active = input($_POST,'active') === '1' || ($old['code'] ?? '') === 'created';
         if (!isset(status_buckets()[$bucket])) {
@@ -262,13 +269,33 @@ function save_status(array $user, ?int $id): string
         }
         $order = int_input(input($_POST,'sort_order'), 0, 65535) ?? 100;
         if ($old === null) {
-            query('INSERT INTO statuses (code,label,bucket,active,sort_order) VALUES (?,?,?,?,?)',
-                ['custom-' . bin2hex(random_bytes(8)), $label, $bucket, (int) $active, $order]);
-            $id = (int) db()->lastInsertId();
-        } else {
-            query('UPDATE statuses SET label = ?, bucket = ?, active = ?, sort_order = ? WHERE id = ?',
-                [$label, $bucket, (int) $active, $order, $id]);
+            $lines = array_key_exists('labels', $_POST)
+                ? preg_split('/\R/u', value($_POST, 'labels', 5100, true))
+                : [value($_POST, 'label', 100, true)];
+            $labels = array_filter(array_map('trim', $lines), static fn (string $label): bool => $label !== '');
+            if ($labels === [] || count($labels) > 50) {
+                throw new ValidationError('Enter between 1 and 50 status labels, one per line.');
+            }
+            $usedLabels = [];
+            foreach (query('SELECT label FROM statuses ORDER BY id FOR UPDATE')->fetchAll(PDO::FETCH_COLUMN) as $existing) {
+                $usedLabels[mb_convert_case($existing, MB_CASE_FOLD, 'UTF-8')] = true;
+            }
+            foreach ($labels as $label) {
+                $label = value(['label' => $label], 'label', 100, true);
+                $key = mb_convert_case($label, MB_CASE_FOLD, 'UTF-8');
+                if (isset($usedLabels[$key])) {
+                    throw new ValidationError('The status label “' . $label . '” already exists or is repeated in this batch.');
+                }
+                $usedLabels[$key] = true;
+                query('INSERT INTO statuses (code,label,bucket,active,sort_order) VALUES (?,?,?,?,?)',
+                    ['custom-' . bin2hex(random_bytes(8)), $label, $bucket, (int) $active, $order]);
+                record_audit($user, 'saved status', 'status', (int) db()->lastInsertId(), $label);
+            }
+            return count($labels) === 1 ? 'Status saved.' : count($labels) . ' statuses added.';
         }
+        $label = value($_POST, 'label', 100, true);
+        query('UPDATE statuses SET label = ?, bucket = ?, active = ?, sort_order = ? WHERE id = ?',
+            [$label, $bucket, (int) $active, $order, $id]);
         record_audit($user, 'saved status', 'status', $id, $label);
         return 'Status saved.';
     });
@@ -391,7 +418,7 @@ function configurable_fields(): array
             'linkedin' => ['LinkedIn profile URL','url',250],
         ],
         'Shipment and map settings' => [
-            'tracking_prefix' => ['Tracking number prefix','text',10],
+            'tracking_prefix' => ['Tracking number prefix (2 or 3 characters)','text',3],
             'timezone' => ['Display time zone (IANA name)','text',80],
             'office_latitude' => ['Office map latitude','text',25],
             'office_longitude' => ['Office map longitude','text',25],
@@ -407,10 +434,12 @@ function configurable_fields(): array
 function settings_page(array $user, string $error): void
 {
     admin_layout('Website settings', $user, static function (): void {
+        $values = settings();
+        $values['tracking_prefix'] = substr($values['tracking_prefix'], 0, 3);
         ?>
         <form method="post" action="/admin/settings/"><?= csrf_field() ?>
             <?php foreach (configurable_fields() as $heading => $fields): ?>
-                <section class="panel"><h2><?= e($heading) ?></h2><div class="fields-grid"><?php management_fields($fields, settings()); ?></div></section>
+                <section class="panel"><h2><?= e($heading) ?></h2><div class="fields-grid"><?php management_fields($fields, $values); ?></div></section>
             <?php endforeach; ?>
             <section class="panel"><h2>Email notifications</h2>
                 <p><?= smtp_ready() ? 'SMTP settings are present. Confirm delivery with a test message and cron.' : 'SMTP is disabled or incomplete. Configure it in the private configuration file.' ?></p>
@@ -439,8 +468,8 @@ function save_settings(array $user): string
         || ($values['whatsapp'] !== '' && !preg_match('/\A[1-9][0-9]{7,14}\z/', $values['whatsapp']))) {
         throw new ValidationError('Use an international telephone number and digits only for WhatsApp.');
     }
-    if (!preg_match('/\A[A-Z0-9]{2,10}\z/', $values['tracking_prefix'])) {
-        throw new ValidationError('Use 2 to 10 uppercase letters or numbers for the tracking prefix.');
+    if (!preg_match('/\A[A-Z0-9]{2,3}\z/', $values['tracking_prefix'])) {
+        throw new ValidationError('Use 2 or 3 uppercase letters or numbers for the tracking prefix.');
     }
     if (!in_array($values['timezone'], DateTimeZone::listIdentifiers(DateTimeZone::ALL_WITH_BC), true)) {
         throw new ValidationError('Enter a valid IANA timezone.');

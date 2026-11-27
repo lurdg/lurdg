@@ -1,13 +1,13 @@
 <?php
 declare(strict_types=1);
 
-function map_view(string $name, string|float $latitude, string|float $longitude): void
+function map_view(string $name, string|float $latitude, string|float $longitude, bool $pulse = false): void
 {
     $url = 'https://www.openstreetmap.org/?' . http_build_query(['mlat' => $latitude, 'mlon' => $longitude])
         . '#map=12/' . rawurlencode((string) $latitude) . '/' . rawurlencode((string) $longitude);
     ?>
     <div class="map" aria-label="<?= e('Map showing ' . $name) ?>" role="region"
-        data-latitude="<?= e($latitude) ?>" data-longitude="<?= e($longitude) ?>" data-location="<?= e($name) ?>"></div>
+        data-latitude="<?= e($latitude) ?>" data-longitude="<?= e($longitude) ?>" data-location="<?= e($name) ?>"<?= $pulse ? ' data-pulse-marker' : '' ?>></div>
     <a class="text-link map-fallback" href="<?= e($url) ?>" target="_blank" rel="noopener noreferrer">Open location in OpenStreetMap</a>
     <?php
 }
@@ -64,6 +64,7 @@ function shipment_result(array $shipment): void
     $facts = [
         'Origin' => $shipment['origin'], 'Destination' => $shipment['destination'],
         'Shipment created' => show_time($shipment['created_at'], 'j M Y'),
+        'Departure date' => show_time($shipment['departure_at'], 'j M Y'),
         'Estimated delivery' => date_label($shipment['estimated_delivery']),
         'Sender' => $shipment['shipper_name'], 'Sender address' => $shipment['shipper_address'],
         'Receiver' => $shipment['receiver_name'], 'Receiver address' => $shipment['receiver_address'],
@@ -83,7 +84,7 @@ function shipment_result(array $shipment): void
         <?php if ($shipment['public_notes'] !== ''): ?><div class="preserve-lines notice info"><?= e($shipment['public_notes']) ?></div><?php endif; ?>
     </section>
     <section class="panel" aria-labelledby="location-result">
-        <h2 id="location-result">Last recorded location</h2>
+        <h2 id="location-result">Current Location</h2>
         <?php $place = $shipment['location']; if ($place === null): ?>
             <p class="muted">A location has not yet been recorded for this shipment.</p>
         <?php else: ?>
@@ -91,15 +92,15 @@ function shipment_result(array $shipment): void
                 <time class="muted" datetime="<?= e(iso_datetime($place['occurred_at'])) ?>"><?= e(show_time($place['occurred_at'])) ?></time>
             </p>
             <?php if (isset($place['latitude'], $place['longitude'])): ?>
-                <?php map_view($place['location'] ?: 'Recorded coordinates', $place['latitude'], $place['longitude']); ?>
+                <?php map_view($place['location'] ?: 'Recorded coordinates', $place['latitude'], $place['longitude'], true); ?>
             <?php endif; ?>
         <?php endif; ?>
     </section>
     <section class="panel" aria-labelledby="tracking-history"><h2 id="tracking-history">Shipment progress</h2>
         <?php if ($shipment['events'] === []): ?><p>Tracking updates will appear as they are recorded.</p><?php else: ?>
             <ol class="timeline">
-            <?php foreach ($shipment['events'] as $event): ?>
-                <li><strong><?= e($event['kind'] === 'status' ? $event['status_label'] : 'Location recorded') ?></strong>
+            <?php foreach ($shipment['events'] as $index => $event): ?>
+                <li<?= $shipment['history_page'] === 1 && $index === 0 ? ' class="latest-progress" aria-current="true"' : '' ?>><strong><?= e($event['kind'] === 'status' ? $event['status_label'] : 'Location recorded') ?></strong>
                     <time datetime="<?= e(iso_datetime($event['occurred_at'])) ?>"><?= e(show_time($event['occurred_at'])) ?></time>
                     <?php if ($event['location'] !== ''): ?><p><?= e($event['location']) ?></p><?php endif; ?>
                     <?php if ($event['customer_remarks'] !== ''): ?><p class="preserve-lines"><?= e($event['customer_remarks']) ?></p><?php endif; ?>

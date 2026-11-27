@@ -9,13 +9,17 @@ Create staff accounts individually and give each person the minimum role necessa
 ## Shipments
 
 1. Open **Shipments → Create shipment**. Enter the origin, destination, party names and shipping method. Fill in the schedule, parcel details and other fields as available.
-2. Choose a status and assign an agent when appropriate. Saving generates a tracking number and an initial event. Enter the initial location if it is known.
+2. Choose a status and assign an agent when appropriate. Saving generates a 12-character tracking number and an initial event. Enter the initial location and departure date if known. Tracking displays a departure date when one has been saved.
 3. Share the tracking number with the intended customer. Anyone with the number can see the sender and receiver names and addresses saved on the shipment.
 4. Keep internal and customer-visible notes separate. A public location label and customer-visible remarks are displayed with the timeline. Material intended for staff belongs in the internal description.
 5. Under **Record status**, choose the status and enter the location. Use **Find coordinates** to fill the map fields, or enter them directly. Review the place and coordinates, then click **Save tracking update**. The place name and time appear in tracking even when coordinates are unavailable. Use the actual event time if known. A backdated update appears in history while a newer update remains current.
 6. Use **Shipments** filters for status, origin, destination and creation date. Search by tracking number or exact reference. **Export filtered CSV** includes private fields and must be handled accordingly. Select **Print details** or **Shipping label** for a print-ready page.
-7. Archive older shipments to remove them from the active list and retain public tracking. Unarchive them to resume editing. Move a shipment to Trash to take its tracking result offline. Restore it from the Trash filter. Only a super administrator can permanently delete a trashed shipment.
-8. Upload up to 8 MB per PDF, JPEG or PNG. Documents are accessible to eligible staff through the shipment record. A status in use can be retired so that old history retains its meaning.
+7. Archive older shipments to remove them from the active list and retain public tracking. Use **Move to trash** beside a shipment in **Shipment records** to take its tracking result offline. Open **Shipments → Trash** to restore a shipment to its previous list. A super administrator can permanently delete a shipment from Trash.
+8. Upload up to 8 MB per PDF, JPEG or PNG. Documents are accessible to eligible staff through the shipment record.
+
+## Status catalogue
+
+Under **Statuses → Add status**, enter up to 50 labels, one per line. Choose the dashboard group, display order and availability for the batch, then click **Add statuses**. Select an existing label from the catalogue to edit it individually. A status in use can be retired so that old history retains its meaning.
 
 ## Inbox, customers and audit
 

@@ -4,7 +4,7 @@ Standalone PHP and MariaDB website and shipment-management application for Namec
 
 ## Download
 
-Get the cPanel-ready ZIP or the update for existing installations from the [Afrilink Global v1.0.5 release](https://github.com/lurdg/lurdg/releases/tag/afrilink-global-v1.0.5). The full installation ZIP includes minified browser assets.
+Get the cPanel-ready ZIP or the update for existing installations from the [Afrilink Global v1.0.6 release](https://github.com/lurdg/lurdg/releases/tag/afrilink-global-v1.0.6). The full installation ZIP includes minified browser assets.
 
 ## Contents
 

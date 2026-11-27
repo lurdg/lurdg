@@ -46,6 +46,15 @@ document.querySelectorAll('.map[data-latitude]').forEach((element) => {
     }).addTo(map);
     const popup = document.createElement('span');
     popup.textContent = element.dataset.location;
+    if (element.hasAttribute('data-pulse-marker')) {
+        L.circleMarker(coordinates, {
+            className: 'map-marker-pulse',
+            radius: 13,
+            fillColor: '#d32636',
+            stroke: false,
+            interactive: false
+        }).addTo(map);
+    }
     const marker = L.marker(coordinates, {alt: element.dataset.location, title: element.dataset.location});
     marker.addTo(map).bindPopup(popup);
 });

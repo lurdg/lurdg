@@ -60,12 +60,12 @@ function public_layout(string $title, string $description, callable $body, bool 
     <meta property="og:image" content="<?= e(base_url() . '/assets/hero.webp') ?>">
     <?php if ($noindex): ?><meta name="robots" content="noindex,nofollow"><?php endif; ?>
     <link rel="icon" href="/assets/afrilink.png" type="image/png">
-    <link rel="stylesheet" href="/assets/site.css">
+    <link rel="stylesheet" href="/assets/site.css?v=6">
     <?php if ($map): ?>
         <link rel="stylesheet" href="/assets/leaflet/leaflet.css">
         <script defer src="/assets/leaflet/leaflet.js"></script>
     <?php endif; ?>
-    <script defer src="/assets/site.js"></script>
+    <script defer src="/assets/site.js?v=6"></script>
     <?php if ($path === '/'): ?>
         <script type="application/ld+json" nonce="<?= e(csp_nonce()) ?>"><?= json_encode([
             '@context' => 'https://schema.org',

@@ -24,6 +24,7 @@ table{width:100%;border-collapse:collapse;text-align:left}
 th,td{padding:11px 13px;border-bottom:1px solid var(--line);vertical-align:middle;font-size:.9rem}
 th{background:#eef2f7;font-weight:800;white-space:nowrap}
 td{overflow-wrap:anywhere}
+.row-actions{display:flex;flex-wrap:wrap;gap:8px}
 .paging{margin-top:15px;display:flex;gap:14px;align-items:center;font-size:.9rem}
 .attachment-form{margin-top:18px}
 .geocode-results{display:grid;gap:5px;color:var(--muted);font-size:.9rem}

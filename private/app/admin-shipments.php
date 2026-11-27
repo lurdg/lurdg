@@ -4,7 +4,17 @@ declare(strict_types=1);
 function admin_shipments_route(array $user, string $path): void
 {
     if ($path === '/admin/shipments/' && !is_post()) {
+        if (input($_GET, 'state') === 'trash' && can($user, 'manage-shipments')) {
+            $filters = $_GET;
+            unset($filters['state']);
+            redirect('/admin/shipments/trash/?' . filters_query($filters, ['page' => page_number()]));
+        }
         shipments_page($user);
+        return;
+    }
+    if ($path === '/admin/shipments/trash/' && !is_post()) {
+        require_permission($user, 'manage-shipments');
+        shipments_page($user, true);
         return;
     }
     if ($path === '/admin/shipments/new/') {
@@ -69,8 +79,11 @@ function shipment_action(array $user, array $shipment, string $action, ?int $rec
                     'trash' => 'Shipment moved to trash.', 'restore' => 'Shipment restored.',
                     'purge' => 'Shipment permanently deleted.',
                 });
-                if ($action === 'purge') {
-                    redirect('/admin/shipments/?state=trash');
+                if ($action === 'purge' || ($action === 'restore' && input($_GET, 'return') === 'trash')) {
+                    redirect('/admin/shipments/trash/');
+                }
+                if ($action === 'trash' && input($_GET, 'return') === 'records') {
+                    redirect('/admin/shipments/' . ($shipment['archived_at'] === null ? '' : '?state=archive'));
                 }
                 break;
             case 'upload':
@@ -118,33 +131,44 @@ function pagination(string $base, int $page, bool $next, string $query = ''): vo
     </nav><?php
 }
 
-function shipments_page(array $user): void
+function shipments_page(array $user, bool $trash = false): void
 {
+    $path = $trash ? '/admin/shipments/trash/' : '/admin/shipments/';
+    $filters = $_GET;
+    if ($trash) {
+        unset($filters['state']);
+    }
+    $scope = $trash ? ['state' => 'trash'] : [];
     try {
-        [$where, $params] = shipment_list_filter($user, $_GET);
+        [$where, $params] = shipment_list_filter($user, $scope + $filters);
         $message = '';
     } catch (ValidationError $error) {
-        [$where, $params] = shipment_list_filter($user, []);
+        [$where, $params] = shipment_list_filter($user, $scope);
         $message = $error->getMessage();
     }
     $page = page_number();
     $offset = ($page - 1) * 25;
-    $list = query('SELECT s.id,s.tracking_number,s.origin,s.destination,t.label AS status_label,t.bucket,s.created_at AS activity
-        FROM shipments s JOIN statuses t ON s.status_id = t.id' . $where
-        . " ORDER BY s.created_at DESC,s.id DESC LIMIT 26 OFFSET $offset", $params)->fetchAll();
-    admin_layout('Shipments', $user, static function () use ($user, $list, $page): void {
+    $activity = $trash ? 's.deleted_at' : 's.created_at';
+    $list = query("SELECT s.id,s.tracking_number,s.origin,s.destination,t.label AS status_label,t.bucket,$activity AS activity
+        FROM shipments s JOIN statuses t ON s.status_id = t.id" . $where
+        . " ORDER BY $activity DESC,s.id DESC LIMIT 26 OFFSET $offset", $params)->fetchAll();
+    admin_layout($trash ? 'Shipment trash' : 'Shipments', $user, static function () use ($user, $list, $page, $path, $filters, $scope, $trash): void {
         $state = input($_GET, 'state');
         ?>
         <div class="admin-toolbar">
-        <?php if (can($user, 'manage-shipments')): ?><a class="button" href="/admin/shipments/new/">Create shipment</a><?php endif; ?>
-        <?php if (can($user, 'export')): ?><a class="button secondary" href="/admin/shipments/export/?<?= e(filters_query($_GET)) ?>">Export filtered CSV</a><?php endif; ?>
+        <?php if ($trash): ?>
+            <a class="button secondary" href="/admin/shipments/">Shipment records</a>
+        <?php elseif (can($user, 'manage-shipments')): ?>
+            <a class="button" href="/admin/shipments/new/">Create shipment</a>
+            <a class="button secondary" href="/admin/shipments/trash/">Trash</a>
+        <?php endif; ?>
+        <?php if (can($user, 'export')): ?><a class="button secondary" href="/admin/shipments/export/?<?= e(filters_query($filters, $scope)) ?>">Export filtered CSV</a><?php endif; ?>
         </div>
         <section class="panel">
-            <form method="get" action="/admin/shipments/" class="admin-filters">
+            <form method="get" action="<?= e($path) ?>" class="admin-filters">
                 <label>Tracking number or reference<input name="q" maxlength="100" value="<?= e(input($_GET, 'q')) ?>"></label>
-                <?php if ($user['role'] !== 'agent'): ?>
-                    <label>Record state<select name="state"><option value="">Active</option><option value="archive"<?= $state === 'archive' ? ' selected' : '' ?>>Archived</option>
-                    <?php if (can($user, 'manage-shipments')): ?><option value="trash"<?= $state === 'trash' ? ' selected' : '' ?>>Trash</option><?php endif; ?></select></label>
+                <?php if (!$trash && $user['role'] !== 'agent'): ?>
+                    <label>Record state<select name="state"><option value="">Active</option><option value="archive"<?= $state === 'archive' ? ' selected' : '' ?>>Archived</option></select></label>
                 <?php endif; ?>
                 <label>Status<select name="status"><option value="">All statuses</option>
                     <?php foreach (status_options() as $status): ?><option value="<?= e($status['id']) ?>"<?= (string) $status['id'] === input($_GET, 'status') ? ' selected' : '' ?>><?= e($status['label']) ?></option><?php endforeach; ?>
@@ -152,28 +176,42 @@ function shipments_page(array $user): void
                 <?php foreach (['origin' => 'Origin', 'destination' => 'Destination', 'from' => 'Created from', 'to' => 'Created to'] as $key => $label): ?>
                     <label><?= e($label) ?><input name="<?= e($key) ?>" type="<?= in_array($key, ['from','to'], true) ? 'date' : 'text' ?>" value="<?= e(input($_GET, $key)) ?>"></label>
                 <?php endforeach; ?>
-                <div class="filter-toolbar"><button class="button">Apply filters</button><a class="text-link" href="/admin/shipments/">Clear</a></div>
+                <div class="filter-toolbar"><button class="button">Apply filters</button><a class="text-link" href="<?= e($path) ?>">Clear</a></div>
             </form>
         </section>
-        <section class="panel"><h2>Shipment records</h2><?php shipment_table(array_slice($list, 0, 25)); pagination('/admin/shipments/', $page, count($list) > 25, filters_query($_GET)); ?></section>
+        <section class="panel"><h2><?= $trash ? 'Deleted shipments' : 'Shipment records' ?></h2>
+            <?php shipment_table(array_slice($list, 0, 25), $user, $trash); pagination($path, $page, count($list) > 25, filters_query($filters)); ?>
+        </section>
         <?php
     }, $message, $message !== '');
 }
 
-function shipment_table(array $list): void
+function shipment_table(array $list, ?array $user = null, bool $trash = false): void
 {
     if ($list === []) {
         ?><p class="muted">No shipments found.</p><?php
         return;
     }
+    $canManage = $user !== null && can($user, 'manage-shipments');
+    $canPurge = $trash && $user !== null && can($user, 'purge');
     ?>
     <div class="table-scroll"><table><thead><tr><th scope="col">Tracking number</th><th scope="col">Origin</th>
-        <th scope="col">Destination</th><th scope="col">Status</th><th scope="col">Date</th></tr></thead><tbody>
+        <th scope="col">Destination</th><th scope="col">Status</th><th scope="col"><?= $trash ? 'Deleted on' : 'Date' ?></th>
+        <?php if ($canManage): ?><th scope="col">Actions</th><?php endif; ?></tr></thead><tbody>
     <?php foreach ($list as $record): ?>
-        <tr><td><a class="text-link" href="/admin/shipments/<?= e($record['id']) ?>/"><?= e($record['tracking_number']) ?></a></td>
+        <?php $url = '/admin/shipments/' . $record['id'] . '/'; ?>
+        <tr><td><a class="text-link" href="<?= e($url) ?>"><?= e($record['tracking_number']) ?></a></td>
             <td><?= e($record['origin']) ?></td><td><?= e($record['destination']) ?></td>
             <td><span class="badge <?= e($record['bucket']) ?>"><?= e($record['status_label']) ?></span></td>
-            <td><?= e(show_time($record['activity'], 'j M Y')) ?></td></tr>
+            <td><?= e(show_time($record['activity'], 'j M Y')) ?></td>
+            <?php if ($canManage): ?><td><div class="row-actions">
+                <?php if ($trash): ?>
+                    <?php post_button($url . 'restore/?return=trash', 'Restore'); ?>
+                    <?php if ($canPurge): post_button($url . 'purge/', 'Permanently delete', 'Permanently delete this shipment and its tracking history?'); endif; ?>
+                <?php else: ?>
+                    <?php post_button($url . 'trash/?return=records', 'Move to trash', 'Move this shipment to trash and hide it from public tracking?'); ?>
+                <?php endif; ?>
+            </div></td><?php endif; ?></tr>
     <?php endforeach; ?>
     </tbody></table></div>
     <?php
@@ -288,9 +326,9 @@ function shipment_edit(array $user, ?array $shipment): void
     }, $message, $message !== '');
 }
 
-function post_button(string $url, string $label, bool $confirm = false): void
+function post_button(string $url, string $label, bool|string $confirm = false): void
 {
-    ?><form method="post" action="<?= e($url) ?>"<?= $confirm ? ' data-confirm="Confirm this action?"' : '' ?>>
+    ?><form method="post" action="<?= e($url) ?>"<?php if ($confirm): ?> data-confirm="<?= e($confirm === true ? 'Confirm this action?' : $confirm) ?>"<?php endif; ?>>
         <?= csrf_field() ?><button class="button compact <?= $confirm ? 'danger' : 'secondary' ?>"><?= e($label) ?></button></form><?php
 }
 

@@ -8,7 +8,12 @@ function tracking_key(string $number): string
 
 function new_tracking_number(): string
 {
-    return setting('tracking_prefix') . '-' . strtoupper(bin2hex(random_bytes(12)));
+    $alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    $number = substr(setting('tracking_prefix'), 0, 3);
+    while (strlen($number) < 12) {
+        $number .= $alphabet[random_int(0, 35)];
+    }
+    return $number;
 }
 
 function shipment_fields(): array
@@ -194,11 +199,21 @@ function save_shipment(array $user, ?int $id, array $source): int
         if ($id === null) {
             $fields['status_id'] = $statusId;
             $fields['created_at'] = $fields['updated_at'];
-            $fields['tracking_number'] = new_tracking_number();
-            $fields['lookup_key'] = tracking_key($fields['tracking_number']);
-            $columns = array_keys($fields);
-            query('INSERT INTO shipments (' . implode(',', $columns) . ') VALUES ('
-                . implode(',', array_fill(0, count($columns), '?')) . ')', array_values($fields));
+            $columns = [...array_keys($fields), 'tracking_number', 'lookup_key'];
+            $insert = 'INSERT INTO shipments (' . implode(',', $columns) . ') VALUES ('
+                . implode(',', array_fill(0, count($columns), '?')) . ')';
+            for ($attempt = 1; ; $attempt++) {
+                $fields['tracking_number'] = new_tracking_number();
+                $fields['lookup_key'] = tracking_key($fields['tracking_number']);
+                try {
+                    query($insert, array_values($fields));
+                    break;
+                } catch (PDOException $error) {
+                    if ($attempt === 5 || (int) ($error->errorInfo[1] ?? 0) !== 1062) {
+                        throw $error;
+                    }
+                }
+            }
             $id = (int) db()->lastInsertId();
             append_event($id, $status, ['occurred_at' => $fields['created_at']] + $location, $user);
             record_audit($user, 'created shipment', 'shipment', $id);
@@ -321,7 +336,7 @@ function lifecycle(array $user, int $id, string $action): void
 function public_shipment(string $number, int $page = 1): ?array
 {
     $shipment = row('SELECT s.id,s.tracking_number,s.shipper_name,s.shipper_address,s.receiver_name,s.receiver_address,
-        s.origin,s.destination,s.created_at,s.estimated_delivery,s.category,s.method,s.weight,s.packages,
+        s.origin,s.destination,s.created_at,s.departure_at,s.estimated_delivery,s.category,s.method,s.weight,s.packages,
         s.public_notes,t.label AS status_label,t.bucket FROM shipments s JOIN statuses t ON t.id = s.status_id
         WHERE s.lookup_key = ? AND s.deleted_at IS NULL', [tracking_key($number)]);
     if ($shipment === null) {
